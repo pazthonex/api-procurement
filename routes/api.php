@@ -21,6 +21,7 @@ Route::post('/test', function(){
 
 
 Route::post('login', [UsersController::class, 'login']);
+Route::post('loginbygoogle', [UsersController::class, 'login_using_google']);
 
 Route::post('users/store', [UsersController::class, 'store']);
 Route::post('createtoken', [UsersController::class, 'createtoken']);
@@ -40,12 +41,6 @@ Route::middleware(['auth:sanctum','authsuperadmin'])->group(function (){
       });
  
  });
-
-
-
-
-
-
 Route::middleware(['auth:sanctum'])->group(function (){
 
    

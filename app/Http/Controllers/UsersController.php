@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 
 class UsersController extends Controller
@@ -82,28 +83,85 @@ class UsersController extends Controller
         ]);
     } 
 
-
-    public function createtoken(Request $request){
+    public function login_using_google(Request $request){
         try {
-            $aes = new AESCipher();
-            $role = $request->data['role'];
-            $campus = $request->data['campus'];
-            $name = $request->data['name'];
-            $employee_id = $request->data['employee_id'];
-
-            $user = User::create([
-                'name'=> $name,
-                'employee_id'=>  $aes->decrypt($employee_id),
-                'campus'=>  $aes->decrypt($campus),
-                'role'=> $aes->decrypt($role),
-                'password'=> Hash::make($request->password)
-            ]);
-             $token = $user->createToken('employee_token', ['employee'])->plainTextToken;
-            return response()->json( ['status' => 200,'message' => [  'name' => $name, 'token' => $token] ]);
-
-        } catch (\Throwable $th) {
-            return response()->json( ['status' => 400,'error' => $th ]);
-
+           
+        $aes = new AESCipher();
+        $email = $request->email;
+        $checkEmail = Http::withToken(env('Auth_HRMIS_Token'))->post(env('APP_HRMIS_API') . "/api/auth/checkemail", [  "email" => $email ])->json();
+        
+        if($checkEmail){
+            if($checkEmail['status'] == 200){
+                $employee_id = $aes->decrypt($checkEmail['data']['employee_id']);
+                $name = ucfirst(strtolower($checkEmail['data']['firstname'])).' '.ucfirst(strtolower($checkEmail['data']['lastname']));
+                $photo = $checkEmail['data']['photo'];
+                $data = array();
+                $user = User::where('employee_id', $employee_id)->first();
+                if($user){
+                    $ablitity_type = '';
+                    if($user->role == 1){
+                        $ablitity_type = 'superadmin';   
+                    }else if($user->role == 8){
+                        $ablitity_type = 'employee';
+                    }
+                   $user->tokens()->delete();
+                   $name = $user->name;
+                    $token = $user->createToken(time().'_'.$ablitity_type.'Token', [$ablitity_type])->plainTextToken;
+                    $data = [
+                        'token' => $token,
+                        'name' => $name,
+                        'role' => $user->role,
+                        'photo' => $photo
+                    ];
+                }else{
+                    $user = User::create([
+                        'employee_id'=> $employee_id,
+                         'name'=>  $name,
+                         'role'=> 8,
+                         'photo'=>  $photo,
+                        'campus'=> 1, #change this to dynamic
+                    ]);
+                    $token = $user->createToken(time().'_employeeToken', ['employee'])->plainTextToken;
+                    $data = [
+                        'token' => $token,
+                        'name' => $name,
+                        'photo'=>  $photo,
+                        'role' => 8,
+                    ];
+                    
+                }                
+                return response()->json([ 'status' => 200, 'data' => $data, 'message' => 'Logged in Successfully',]);
+            }else if($checkEmail['status'] == 400){
+                return response()->json(['status' => 400, 'message' => 'Email is not yet register in HRMIS.']);
+            }
         }
+    } catch (\Throwable $th) {
+        return response()->json( ['status' => 500,'errors' => $th ]);
     }
+
+    }
+
+    // public function createtoken(Request $request){
+    //     try {
+          
+    //         $role = $request->data['role'];
+    //         $campus = $request->data['campus'];
+    //         $name = $request->data['name'];
+    //         $employee_id = $request->data['employee_id'];
+
+    //         $user = User::create([
+    //             'name'=> $name,
+    //             'employee_id'=>  $aes->decrypt($employee_id),
+    //             'campus'=>  $aes->decrypt($campus),
+    //             'role'=> $aes->decrypt($role),
+    //             'password'=> Hash::make($request->password)
+    //         ]);
+    //          $token = $user->createToken('employee_token', ['employee'])->plainTextToken;
+    //         return response()->json( ['status' => 200,'message' => [  'name' => $name, 'token' => $token] ]);
+
+    //     } catch (\Throwable $th) {
+    //         return response()->json( ['status' => 400,'error' => $th ]);
+
+    //     }
+    // }
 }
